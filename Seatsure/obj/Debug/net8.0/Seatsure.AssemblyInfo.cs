@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Seatsure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b92950f1cc73896f9ffd88f3bfbd1d0fed57994e")]
 [assembly: System.Reflection.AssemblyProductAttribute("Seatsure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Seatsure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
