@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Seatsure.DAL")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b92950f1cc73896f9ffd88f3bfbd1d0fed57994e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c65b90d606f44b7d09ed0fe2cabc2fe1b6dbcfd9")]
 [assembly: System.Reflection.AssemblyProductAttribute("Seatsure.DAL")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Seatsure.DAL")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
