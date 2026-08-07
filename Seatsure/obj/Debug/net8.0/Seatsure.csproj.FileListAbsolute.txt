@@ -77,7 +77,6 @@ D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\staticweb
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\staticwebassets.development.json
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\staticwebassets.build.endpoints.json
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\swae.build.ex.cache
-D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\Seatsure.csproj.Up2Date
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\Seatsure.dll
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\refint\Seatsure.dll
@@ -150,3 +149,4 @@ D:\Back end\Recap\new projects\test\Seatsure\Seatsure\bin\Debug\net8.0\ru\Micros
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\bin\Debug\net8.0\tr\Microsoft.CodeAnalysis.Workspaces.resources.dll
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\bin\Debug\net8.0\zh-Hans\Microsoft.CodeAnalysis.Workspaces.resources.dll
 D:\Back end\Recap\new projects\test\Seatsure\Seatsure\bin\Debug\net8.0\zh-Hant\Microsoft.CodeAnalysis.Workspaces.resources.dll
+D:\Back end\Recap\new projects\test\Seatsure\Seatsure\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

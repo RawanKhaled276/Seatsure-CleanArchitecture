@@ -1,34 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace Seatsure.Domain
 {
     public class Reservation
     {
-        public Guid id { get; set; }
-
+        public Guid Id { get; set; } = Guid.NewGuid();
         public Guid TicketTypeId { get; set; }
-
         public Guid UserId { get; set; }
-
-        public TicketType ticket { get; set; }
-
-        public User user { get; set; }
-
-        // ticket considered as a physical 
-        // ticket, id, manyquantity, 
-        // not different ticeketType
-        // user within the reservation can boook from one to many tickets of the same type 
-
+        public TicketType TicketType { get; set; } = null!;
+        public User User { get; set; } = null!;
         public int Quantity { get; set; }
-
-        public DateTime HoldExpiresAtUTc { get; set; }
-
+        public ReservationStatus Status { get; set; }
+        public DateTime HoldExpiresAtUtc { get; set; }
         public DateTime CreatedAtUtc { get; set; }
-
         public DateTime? ConfirmedAtUtc { get; set; }
     }
 }

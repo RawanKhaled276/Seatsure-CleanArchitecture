@@ -24,11 +24,11 @@ namespace Seatsure.DAL.Migrations
 
             modelBuilder.Entity("Seatsure.Domain.Event", b =>
                 {
-                    b.Property<Guid>("id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime>("CreatedAutUtc")
+                    b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
@@ -39,7 +39,7 @@ namespace Seatsure.DAL.Migrations
                     b.Property<Guid>("OrganizerId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime>("StartsAtutc")
+                    b.Property<DateTime>("StartsAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
@@ -54,16 +54,16 @@ namespace Seatsure.DAL.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.HasKey("id");
+                    b.HasKey("Id");
 
                     b.HasIndex("OrganizerId");
 
-                    b.ToTable("Event");
+                    b.ToTable("Events");
                 });
 
             modelBuilder.Entity("Seatsure.Domain.Reservation", b =>
                 {
-                    b.Property<Guid>("id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
@@ -73,10 +73,13 @@ namespace Seatsure.DAL.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime>("HoldExpiresAtUTc")
+                    b.Property<DateTime>("HoldExpiresAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
                         .HasColumnType("int");
 
                     b.Property<Guid>("TicketTypeId")
@@ -85,79 +88,82 @@ namespace Seatsure.DAL.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.HasKey("id");
+                    b.HasKey("Id");
 
                     b.HasIndex("TicketTypeId");
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Reservation");
+                    b.ToTable("Reservations");
                 });
 
             modelBuilder.Entity("Seatsure.Domain.TicketType", b =>
                 {
-                    b.Property<Guid>("id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("AvailableQuantity")
                         .HasColumnType("int");
 
-                    b.Property<Guid>("Eventid")
+                    b.Property<Guid>("EventId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
                         .IsRequired()
-                        .HasColumnType("varbinary(max)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("TotalQuantity")
                         .HasColumnType("int");
 
-                    b.HasKey("id");
+                    b.HasKey("Id");
 
-                    b.HasIndex("Eventid");
+                    b.HasIndex("EventId");
 
-                    b.ToTable("TicketType");
+                    b.ToTable("TicketTypes");
                 });
 
             modelBuilder.Entity("Seatsure.Domain.User", b =>
                 {
-                    b.Property<Guid>("id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("Password")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("createdAtUtc")
+                    b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("email")
+                    b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("name")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<int>("role")
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Role")
                         .HasColumnType("int");
 
-                    b.HasKey("id");
+                    b.HasKey("Id");
 
-                    b.HasIndex("email");
+                    b.HasIndex("Email")
+                        .IsUnique();
 
-                    b.ToTable("User");
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Seatsure.Domain.Event", b =>
@@ -165,7 +171,7 @@ namespace Seatsure.DAL.Migrations
                     b.HasOne("Seatsure.Domain.User", "Organizer")
                         .WithMany()
                         .HasForeignKey("OrganizerId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Organizer");
@@ -173,28 +179,28 @@ namespace Seatsure.DAL.Migrations
 
             modelBuilder.Entity("Seatsure.Domain.Reservation", b =>
                 {
-                    b.HasOne("Seatsure.Domain.TicketType", "ticket")
-                        .WithMany()
+                    b.HasOne("Seatsure.Domain.TicketType", "TicketType")
+                        .WithMany("Reservations")
                         .HasForeignKey("TicketTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Seatsure.Domain.User", "user")
+                    b.HasOne("Seatsure.Domain.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("ticket");
+                    b.Navigation("TicketType");
 
-                    b.Navigation("user");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Seatsure.Domain.TicketType", b =>
                 {
                     b.HasOne("Seatsure.Domain.Event", "Event")
-                        .WithMany("Tickets")
-                        .HasForeignKey("Eventid")
+                        .WithMany("TicketTypes")
+                        .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -203,7 +209,12 @@ namespace Seatsure.DAL.Migrations
 
             modelBuilder.Entity("Seatsure.Domain.Event", b =>
                 {
-                    b.Navigation("Tickets");
+                    b.Navigation("TicketTypes");
+                });
+
+            modelBuilder.Entity("Seatsure.Domain.TicketType", b =>
+                {
+                    b.Navigation("Reservations");
                 });
 #pragma warning restore 612, 618
         }
