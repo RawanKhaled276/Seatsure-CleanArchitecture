@@ -1,5 +1,6 @@
-.vs/
 **/obj/
 .claude/
 CLAUDE.md
 docs/
+.vs/
+**/bin/
