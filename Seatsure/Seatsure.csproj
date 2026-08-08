@@ -20,4 +20,8 @@
     <ProjectReference Include="..\Seatsure.Domain\Seatsure.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+  </ItemGroup>
+
 </Project>
