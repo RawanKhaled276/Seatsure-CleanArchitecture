@@ -16,6 +16,8 @@ namespace Seatsure.DAL
         {
             base.OnModelCreating(modelBuilder);
 
+            // user configurations
+            
             modelBuilder.Entity<User>(u =>
             {
                 u.HasKey(x => x.Id);
@@ -25,6 +27,7 @@ namespace Seatsure.DAL
                 u.Property(x => x.PasswordHash).IsRequired();
             });
 
+    
             modelBuilder.Entity<Event>(e =>
             {
                 e.HasKey(x => x.Id);
@@ -44,17 +47,19 @@ namespace Seatsure.DAL
             {
                 t.HasKey(x => x.Id);
                 t.Property(x => x.Name).HasMaxLength(50).IsRequired();
-                // concurrency token — EF includes RowVersion in WHERE on every UPDATE
+                // concurrency token — EF includes RowVersion in WHERE on every UPDATE 
                 t.Property(x => x.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<Reservation>(r =>
             {
                 r.HasKey(x => x.Id);
+
                 r.HasOne(x => x.TicketType)
                     .WithMany(t => t.Reservations)
                     .HasForeignKey(x => x.TicketTypeId)
                     .OnDelete(DeleteBehavior.Restrict);
+                    
                 r.HasOne(x => x.User)
                     .WithMany()
                     .HasForeignKey(x => x.UserId)

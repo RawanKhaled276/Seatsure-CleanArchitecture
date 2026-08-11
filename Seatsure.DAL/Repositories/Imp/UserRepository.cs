@@ -11,7 +11,7 @@ public class UserRepository : IUserRepository
     public UserRepository(AppDbContext context) => _context = context;
 
     public async Task<User?> GetByIdAsync(Guid id) =>
-        await _context.Users.FindAsync(id);
+        await _context.Users.FindAsync(id); // implement FindAsync for better performance
 
     public async Task<User?> GetByEmailAsync(string email) =>
         await _context.Users.FirstOrDefaultAsync(u => u.Email == email);

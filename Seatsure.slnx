@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Seatsure.BLL/Seatsure.BLL.csproj" />
   <Project Path="Seatsure.DAL/Seatsure.DAL.csproj" />
   <Project Path="Seatsure.Domain/Seatsure.Domain.csproj" />
   <Project Path="Seatsure/Seatsure.csproj" />

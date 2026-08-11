@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Seatsure.DAL\Seatsure.DAL.csproj" />
     <ProjectReference Include="..\Seatsure.Domain\Seatsure.Domain.csproj" />
+    <ProjectReference Include="..\Seatsure.BLL\Seatsure.BLL.csproj" />
   </ItemGroup>
 
   <ItemGroup>

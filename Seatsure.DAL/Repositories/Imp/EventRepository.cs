@@ -18,7 +18,9 @@ public class EventRepository : IEventRepository
     public async Task<(IEnumerable<Event> Items, int TotalCount)> GetPublishedAsync(int page, int pageSize)
     {
         var query = _context.Events.Where(e => e.Status == EventStatus.Published);
+
         var total = await query.CountAsync();
+        
         var items = await query
             .OrderBy(e => e.StartsAtUtc)
             .Skip((page - 1) * pageSize)
