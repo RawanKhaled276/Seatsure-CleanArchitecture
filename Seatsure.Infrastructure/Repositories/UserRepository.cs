@@ -1,17 +1,21 @@
 using Microsoft.EntityFrameworkCore;
-using Seatsure.DAL.Repositories.Interfaces;
+using Seatsure.Application.Interfaces;
 using Seatsure.Domain;
+using Seatsure.Infrastructure.Data;
 
-namespace Seatsure.DAL.Repositories.Impl;
+namespace Seatsure.Infrastructure.Repositories;
 
 public class UserRepository : IUserRepository
 {
     private readonly AppDbContext _context;
 
-    public UserRepository(AppDbContext context) => _context = context;
+    public UserRepository(AppDbContext context)
+    {
+        _context = context;
+    }
 
     public async Task<User?> GetByIdAsync(Guid id) =>
-        await _context.Users.FindAsync(id); // implement FindAsync for better performance
+        await _context.Users.FindAsync(id);
 
     public async Task<User?> GetByEmailAsync(string email) =>
         await _context.Users.FirstOrDefaultAsync(u => u.Email == email);

@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Seatsure.DAL.Repositories.Interfaces;
+using Seatsure.Application.Interfaces;
 using Seatsure.Domain;
+using Seatsure.Infrastructure.Data;
 
-namespace Seatsure.DAL.Repositories.Impl;
+namespace Seatsure.Infrastructure.Repositories;
 
 public class TicketTypeRepository : ITicketTypeRepository
 {
@@ -13,12 +14,10 @@ public class TicketTypeRepository : ITicketTypeRepository
     public async Task<TicketType?> GetByIdAsync(Guid id) =>
         await _context.TicketTypes.FindAsync(id);
 
-
     public async Task<IEnumerable<TicketType>> GetByEventIdAsync(Guid eventId) =>
         await _context.TicketTypes
             .Where(t => t.EventId == eventId)
             .ToListAsync();
-            
 
     public async Task AddAsync(TicketType ticketType) =>
         await _context.TicketTypes.AddAsync(ticketType);

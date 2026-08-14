@@ -1,8 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Seatsure.BLL;
-using Seatsure.DAL;
-using Seatsure.DAL.Repositories.Interfaces;
-using Seatsure.DAL.Repositories.Impl;
+using Seatsure.Application.Interfaces;
+using Seatsure.Infrastructure.Data;
+using Seatsure.Infrastructure.Repositories;
 
 namespace Seatsure
 {
@@ -14,7 +13,8 @@ namespace Seatsure
 
             // Add services to the container.
             builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+                options.UseSqlServer(
+                    builder.Configuration.GetConnectionString("DefaultConnection")));
 
             // Register repositories
             builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -22,10 +22,9 @@ namespace Seatsure
             builder.Services.AddScoped<ITicketTypeRepository, TicketTypeRepository>();
             builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
 
-            // Register business-logic layer (services, security, JWT options)
-            builder.Services.AddBll(builder.Configuration);
 
             builder.Services.AddControllers();
+
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -42,7 +41,6 @@ namespace Seatsure
             app.UseHttpsRedirection();
 
             app.UseAuthorization();
-
 
             app.MapControllers();
 

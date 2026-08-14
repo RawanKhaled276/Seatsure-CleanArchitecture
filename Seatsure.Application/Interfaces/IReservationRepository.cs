@@ -1,6 +1,6 @@
 using Seatsure.Domain;
 
-namespace Seatsure.DAL.Repositories.Interfaces;
+namespace Seatsure.Application.Interfaces;
 
 public interface IReservationRepository
 {

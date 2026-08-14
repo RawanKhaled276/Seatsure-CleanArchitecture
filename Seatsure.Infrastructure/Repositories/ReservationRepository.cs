@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Seatsure.DAL.Repositories.Interfaces;
+using Seatsure.Application.Interfaces;
 using Seatsure.Domain;
+using Seatsure.Infrastructure.Data;
 
-namespace Seatsure.DAL.Repositories.Impl;
+namespace Seatsure.Infrastructure.Repositories;
 
 public class ReservationRepository : IReservationRepository
 {
@@ -23,7 +24,8 @@ public class ReservationRepository : IReservationRepository
     public async Task<IEnumerable<Reservation>> GetExpiredHoldsAsync() =>
         await _context.Reservations
             .Include(r => r.TicketType)
-            .Where(r => r.Status == ReservationStatus.Pending && r.HoldExpiresAtUtc < DateTime.UtcNow)
+            .Where(r => r.Status == ReservationStatus.Pending &&
+                        r.HoldExpiresAtUtc < DateTime.UtcNow)
             .ToListAsync();
 
     public async Task AddAsync(Reservation reservation) =>

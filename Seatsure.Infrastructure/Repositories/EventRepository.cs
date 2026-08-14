@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Seatsure.DAL.Repositories.Interfaces;
+using Seatsure.Application.Interfaces;
 using Seatsure.Domain;
+using Seatsure.Infrastructure.Data;
 
-namespace Seatsure.DAL.Repositories.Impl;
+namespace Seatsure.Infrastructure.Repositories;
 
 public class EventRepository : IEventRepository
 {
@@ -20,12 +21,13 @@ public class EventRepository : IEventRepository
         var query = _context.Events.Where(e => e.Status == EventStatus.Published);
 
         var total = await query.CountAsync();
-        
+
         var items = await query
             .OrderBy(e => e.StartsAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+
         return (items, total);
     }
 
