@@ -1,7 +1,9 @@
-# SeatSure — Real-Time Event Ticketing & Reservation Platform
-## Technical Blueprint 
+# SeatSure — Clean Architecture & Repository Pattern
+## Technical Blueprint
 
-**Tech stack:** ASP.NET Core (.NET 8 LTS), EF Core + MSSQL, JWT Bearer auth, SignalR, `BackgroundService` for hold expiry, xUnit for testing. Docker is stretch-only (§9).
+**Tech stack:** ASP.NET Core (.NET 8 LTS), Entity Framework Core, SQL Server, C#.
+
+This version of SeatSure implements the **Repository Pattern using the common Clean Architecture structure**.
 
 ---
 
@@ -11,181 +13,707 @@
 
 | Entity | Purpose |
 |---|---|
-| `User` | Attendee or Organizer. Auth identity. |
-| `Event` | Owned by an Organizer. Has a venue name, start time, status. |
-| `TicketType` | Belongs to an Event (e.g. "General", "VIP"). Holds price and inventory. |
-| `Reservation` | A hold or confirmed purchase against a `TicketType`, made by a `User`. |
-
-### 1.2 ER Diagram
-
-```mermaid
-erDiagram
-    USER ||--o{ EVENT : organizes
-    USER ||--o{ RESERVATION : makes
-    EVENT ||--o{ TICKETTYPE : offers
-    TICKETTYPE ||--o{ RESERVATION : "reserved as"
-
-    USER {
-        int Id PK
-        string Name
-        string Email UK
-        string PasswordHash
-        string Role "Organizer|Attendee"
-        datetime CreatedAtUtc
-    }
-    EVENT {
-        int Id PK
-        int OrganizerId FK
-        string Title
-        string Description
-        string VenueName
-        datetime StartsAtUtc
-        string Status "Draft|Published|Cancelled"
-        datetime CreatedAtUtc
-    }
-    TICKETTYPE {
-        int Id PK
-        int EventId FK
-        string Name
-        decimal Price
-        int TotalQuantity
-        int AvailableQuantity
-        byte_array RowVersion "concurrency token"
-    }
-    RESERVATION {
-        int Id PK
-        int TicketTypeId FK
-        int UserId FK
-        int Quantity
-        string Status "Pending|Confirmed|Expired|Cancelled"
-        datetime HoldExpiresAtUtc
-        datetime CreatedAtUtc
-        datetime ConfirmedAtUtc "nullable"
-    }
-```
-
-### 1.3 Key constraints
-
-- `User.Email` — unique index.
-- `TicketType.AvailableQuantity` — never negative; enforced in application logic inside a transaction, not just a DB check constraint (the whole teaching point is *why* app-level enforcement + concurrency tokens are needed).
-- `TicketType.RowVersion` — SQLite: implemented as an EF Core concurrency token (`[Timestamp]`-equivalent via `IsRowVersion()` on a `byte[]`, or a manually incremented `int Version` column if the SQLite provider quirks make native rowversion awkward — decide and pin this in Session 5, see ADR note in §8).
-- `Reservation.Quantity` — must be ≥ 1, and ≤ the ticket type's available quantity at time of request.
-- Foreign keys: `Event.OrganizerId → User.Id`, `TicketType.EventId → Event.Id` (cascade delete), `Reservation.TicketTypeId → TicketType.Id`, `Reservation.UserId → User.Id`.
+| `User` | Represents an attendee or organizer in the system. |
+| `Event` | Represents an event owned by an organizer. |
+| `TicketType` | Represents a ticket category belonging to an event. |
+| `Reservation` | Represents a reservation made by a user for a ticket type. |
 
 ---
 
 ## 2. Architecture
 
+The project was reorganized from the original BLL/DAL structure into the common Clean Architecture structure:
+
 ```mermaid
 graph TD
-    Client["Client (.http file / Swagger UI / tiny demo HTML page)"] -->|HTTP + JWT| C["Controllers\nAuthController, EventsController, TicketTypesController, ReservationsController"]
-    Client -->|WebSocket| Hub["EventAvailabilityHub (SignalR)"]
-    C -->|DTO records in/out| S["ReservationService : IReservationService\n(concurrency + hold logic lives here)"]
-    C --> DB[("EF Core DbContext\nSQLite")]
-    S --> DB
-    S -.->|"broadcasts on change"| Hub
-    BG["HoldExpiryService : BackgroundService\n(scans every 30s)"] --> DB
-    BG -.->|"broadcasts on expiry"| Hub
+    API["Seatsure API"] --> APP["Seatsure.Application"]
+    API --> INFRA["Seatsure.Infrastructure"]
+    APP --> DOMAIN["Seatsure.Domain"]
+    INFRA --> APP
+    INFRA --> DOMAIN
+    INFRA --> DB[("SQL Server\nEF Core")]
 ```
 
-**Explicitly not in scope for Core:** generic repository/UoW, MediatR/CQRS, microservices, message queues, Redis. If a Stretch trainee wants to swap `BackgroundService` polling for a queue-based approach, that's a written comparison exercise, not required code (same pattern as the original ADR-004).
+### 2.1 Domain Layer
 
-**One business rule, one service — the load-bearing lesson of Session 6 (was S5 in the old plan):** all reservation logic (create hold, confirm, cancel, expire) lives in `IReservationService`, injected into controllers. This is where the concurrency handling and the "why does this class exist" conversation happens.
+The `Seatsure.Domain` project contains the core domain entities and enums used by the application.
+
+The Domain layer does not depend on the Application or Infrastructure layers.
 
 ---
 
-## 3. API Contract (frozen — same discipline as before: one contract, all trainees code against it)
+### 2.2 Application Layer
 
-### 3.1 Auth
+The `Seatsure.Application` project contains the repository interfaces (contracts).
 
-| Operation | Method + Path | Success | Failure |
-|---|---|---|---|
-| Register | `POST /api/auth/register` | `201` | `400` validation, `409` email taken |
-| Login | `POST /api/auth/login` | `200` `{ token, expiresAtUtc }` | `401` |
-
-### 3.2 Events
-
-| Operation | Method + Path | Success | Failure |
-|---|---|---|---|
-| List published events | `GET /api/events?page=1&pageSize=10` | `200` paged envelope | `400` bad paging |
-| Get event | `GET /api/events/{id}` | `200` | `404` |
-| Create event (Organizer) | `POST /api/events` | `201` + `Location` | `400`, `401`, `403` |
-| Publish event (Organizer, owner only) | `POST /api/events/{id}/publish` | `200` | `404`, `403` |
-
-### 3.3 Ticket Types
-
-| Operation | Method + Path | Success | Failure |
-|---|---|---|---|
-| List ticket types for event | `GET /api/events/{eventId}/ticket-types` | `200` | `404` event |
-| Add ticket type (Organizer, owner only) | `POST /api/events/{eventId}/ticket-types` | `201` | `400`, `403`, `404` |
-
-### 3.4 Reservations — the core of the project
-
-| Operation | Method + Path | Success | Failure |
-|---|---|---|---|
-| Create hold | `POST /api/ticket-types/{id}/reservations` `{ quantity }` | `201` Pending, `holdExpiresAtUtc` = now+10min | `400` bad quantity, `404`, **`409` insufficient inventory / concurrency conflict** |
-| Confirm reservation | `POST /api/reservations/{id}/confirm` | `200` Confirmed | `404`, `409` already expired/confirmed |
-| Cancel reservation | `POST /api/reservations/{id}/cancel` | `200` Cancelled, inventory restored | `404`, `403` not owner |
-| My reservations | `GET /api/users/me/reservations` | `200` | `401` |
-
-**The `409` on create-hold is the whole point of the project.** Two concurrent requests for the last ticket: one wins (`201`), one loses (`409` with a clear Problem Details message), and inventory is never oversold. Every trainee must be able to demo this with two terminal windows / two Postman tabs firing at once.
-
-### 3.5 Conventions (unchanged from before)
-
-camelCase JSON, UTC ISO-8601 with `Utc` suffix, `int` ids, RFC 7807 Problem Details for all errors, offset pagination envelope:
-
-```json
-{ "items": [...], "page": 1, "pageSize": 10, "totalCount": 42 }
+```text
+Seatsure.Application
+└── Interfaces
+    ├── IUserRepository.cs
+    ├── IEventRepository.cs
+    ├── ITicketTypeRepository.cs
+    └── IReservationRepository.cs
 ```
 
-DTOs are `record`s; entities never cross the controller boundary — same rule, day one.
+The Application layer references the Domain layer.
 
-### 3.6 SignalR contract
-
-Hub: `/hubs/events`
-
-- Client joins group `event-{eventId}` on connect (via a `JoinEvent(eventId)` hub method).
-- Server broadcasts `AvailabilityChanged(ticketTypeId, availableQuantity)` to the group whenever a hold is created, confirmed, cancelled, or expired.
-- No auth required to *view* availability (public); reservation actions still go through the authenticated REST API.
+The repository interfaces define the required data operations without depending on Entity Framework Core or a specific database implementation.
 
 ---
 
-## 4. Concurrency Design (the hard part — teach it explicitly)
+### 2.3 Infrastructure Layer
 
-1. Read `TicketType` with its `RowVersion`/`Version`.
-2. Check `Quantity <= AvailableQuantity`.
-3. Decrement `AvailableQuantity`, save. EF Core includes the original `RowVersion` in the `WHERE` clause automatically.
-4. If another request modified the row first, EF Core throws `DbUpdateConcurrencyException` → service catches it → controller returns `409` with a Problem Details body explaining "someone booked first, please retry."
-5. Wrap steps 1–3 in a single `DbContext` SaveChanges call inside a service method — no separate read-then-write across two round trips without the token, or the lesson is lost.
+The `Seatsure.Infrastructure` project contains the database context and repository implementations.
 
-This single mechanism is the "explain this design decision" question every trainee should be able to answer in their explanation interview — same evidentiary role the old ADR-006/auth explanation played.
+```text
+Seatsure.Infrastructure
+├── Data
+│   └── AppDbContext.cs
+└── Repositories
+    ├── UserRepository.cs
+    ├── EventRepository.cs
+    ├── TicketTypeRepository.cs
+    └── ReservationRepository.cs
+```
 
----
+The Infrastructure layer references the Application and Domain layers.
 
-## 5. Background Service (Hold Expiry)
+`AppDbContext` is responsible for configuring Entity Framework Core and the database entities.
 
-`HoldExpiryService : BackgroundService`:
-
-- Runs a loop, `await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken)` between scans.
-- Each scan: query `Reservations` where `Status == Pending && HoldExpiresAtUtc < DateTime.UtcNow`.
-- For each: set `Status = Expired`, restore `TicketType.AvailableQuantity += Quantity`, save, broadcast `AvailabilityChanged` via the SignalR hub.
-- Must use a scoped `IServiceScopeFactory` to resolve a fresh `DbContext` per scan (the standard `BackgroundService` + scoped-service gotcha — worth teaching explicitly, it trips up almost everyone the first time).
-
----
-
-## 6. Auth Design
-
-- JWT Bearer, issued on login. Claims: `sub` (user id), `role` (`Organizer`/`Attendee`), `email`.
-- `[Authorize(Roles = "Organizer")]` on event/ticket-type creation endpoints.
-- Ownership check (not just role) on publish/edit: the organizer must own the event — this is a manual check in the service/controller, not something `[Authorize]` alone gives you. Same "authn vs authz vs ownership" lesson as the old plan's Session 7, just moved earlier since auth is now core, not stretch-only.
-- Password hashing: `ASP.NET Core Identity`'s hasher or a lightweight `BCrypt.Net` package — pick one and pin it in Session 4, don't leave it open.
+The repository implementations use `AppDbContext` to access the database.
 
 ---
 
-## 7. Testing Strategy (Session 8)
+### 2.4 API Layer
 
-- **Unit tests** on `IReservationService`: the 409-on-oversell case, the successful hold case, the expiry restores-inventory case. This is where the concurrency logic gets proven, not just demoed.
-- **Integration tests** (`WebApplicationFactory`): full create-event → add-ticket-type → reserve → confirm happy path; one negative test (reserve more than available → `409`).
-- Green `dotnet build` + `dotnet test` is the Session 8 checkpoint, same bar as before.
+The `Seatsure` project is the ASP.NET Core Web API.
 
+The API references:
 
+- `Seatsure.Application`
+- `Seatsure.Infrastructure`
+- `Seatsure.Domain`
+
+Repository implementations are registered through Dependency Injection in `Program.cs`.
+
+---
+
+## 3. Repository Pattern
+
+The Repository Pattern was implemented for the main domain entities.
+
+| Repository Interface | Repository Implementation |
+|---|---|
+| `IUserRepository` | `UserRepository` |
+| `IEventRepository` | `EventRepository` |
+| `ITicketTypeRepository` | `TicketTypeRepository` |
+| `IReservationRepository` | `ReservationRepository` |
+
+### 3.1 User Repository
+
+`IUserRepository` provides operations for working with users:
+
+- Get user by ID
+- Get user by email
+- Add a user
+- Save changes
+
+Implementation:
+
+```text
+Seatsure.Infrastructure/Repositories/UserRepository.cs
+```
+
+### 3.2 Event Repository
+
+`IEventRepository` provides operations for working with events:
+
+- Get event by ID
+- Get published events with pagination
+- Add an event
+- Save changes
+
+Implementation:
+
+```text
+Seatsure.Infrastructure/Repositories/EventRepository.cs
+```
+
+### 3.3 Ticket Type Repository
+
+`ITicketTypeRepository` provides operations for working with ticket types:
+
+- Get ticket type by ID
+- Get ticket types by event ID
+- Add a ticket type
+- Save changes
+
+Implementation:
+
+```text
+Seatsure.Infrastructure/Repositories/TicketTypeRepository.cs
+```
+
+### 3.4 Reservation Repository
+
+`IReservationRepository` provides operations for working with reservations:
+
+- Get reservation by ID
+- Get reservations by user ID
+- Get expired reservation holds
+- Add a reservation
+- Save changes
+
+Implementation:
+
+```text
+Seatsure.Infrastructure/Repositories/ReservationRepository.cs
+```
+
+---
+
+## 4. Database
+
+Entity Framework Core is used for database access.
+
+The database context is located at:
+
+```text
+Seatsure.Infrastructure/Data/AppDbContext.cs
+```
+
+`AppDbContext` contains the following `DbSet`s:
+
+- `Users`
+- `Events`
+- `TicketTypes`
+- `Reservations`
+
+### 4.1 Entity Configuration
+
+The `OnModelCreating` method configures:
+
+- Primary keys
+- Required properties
+- Maximum property lengths
+- Unique email index
+- Foreign key relationships
+- Delete behaviors
+- Ticket type concurrency configuration
+
+For example:
+
+- `User.Email` has a unique index.
+- `TicketType.RowVersion` is configured as a concurrency token.
+- `Event` and `TicketType` relationships are configured with the required foreign keys and delete behaviors.
+- `Reservation` relationships are configured with the required foreign keys.
+
+---
+
+## 5. Dependency Injection
+
+Repository implementations are registered in the API's `Program.cs`.
+
+```csharp
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IEventRepository, EventRepository>();
+builder.Services.AddScoped<ITicketTypeRepository, TicketTypeRepository>();
+builder.Services.AddScoped<IReservationRepository, ReservationRepository>();
+```
+
+This allows the API to depend on repository interfaces instead of directly depending on their concrete implementations.
+
+---
+
+## 6. Project Structure
+
+```text
+Seatsure
+│
+├── Seatsure
+│   ├── Program.cs
+│   └── Seatsure.csproj
+│
+├── Seatsure.Domain
+│   └── Seatsure.Domain.csproj
+│
+├── Seatsure.Application
+│   ├── Interfaces
+│   │   ├── IUserRepository.cs
+│   │   ├── IEventRepository.cs
+│   │   ├── ITicketTypeRepository.cs
+│   │   └── IReservationRepository.cs
+│   └── Seatsure.Application.csproj
+│
+├── Seatsure.Infrastructure
+│   ├── Data
+│   │   └── AppDbContext.cs
+│   ├── Repositories
+│   │   ├── UserRepository.cs
+│   │   ├── EventRepository.cs
+│   │   ├── TicketTypeRepository.cs
+│   │   └── ReservationRepository.cs
+│   └── Seatsure.Infrastructure.csproj
+│
+└── Seatsure.slnx
+```
+
+---
+
+## 7. Migration from the Original Structure
+
+The original project structure was:
+
+```text
+Seatsure.Domain
+Seatsure.BLL
+Seatsure.DAL
+Seatsure
+```
+
+As part of this task:
+
+- `Seatsure.BLL` was removed.
+- `Seatsure.DAL` was removed.
+- `Seatsure.Application` was created.
+- `Seatsure.Infrastructure` was created.
+- Repository interfaces were moved to `Application`.
+- Repository implementations were moved to `Infrastructure`.
+- `AppDbContext` was moved to `Infrastructure`.
+
+The final structure became:
+
+```text
+Seatsure.Domain
+Seatsure.Application
+Seatsure.Infrastructure
+Seatsure
+```
+
+### 7.1 Repository Interfaces Migration
+
+The repository interfaces were moved from:
+
+```text
+Seatsure.DAL/Repositories/Interfaces
+```
+
+to:
+
+```text
+Seatsure.Application/Interfaces
+```
+
+The following interfaces were moved:
+
+```text
+IUserRepository.cs
+IEventRepository.cs
+ITicketTypeRepository.cs
+IReservationRepository.cs
+```
+
+---
+
+### 7.2 Repository Implementations Migration
+
+The repository implementations were moved from:
+
+```text
+Seatsure.DAL/Repositories/Imp
+```
+
+to:
+
+```text
+Seatsure.Infrastructure/Repositories
+```
+
+The following implementations were moved:
+
+```text
+UserRepository.cs
+EventRepository.cs
+TicketTypeRepository.cs
+ReservationRepository.cs
+```
+
+---
+
+### 7.3 DbContext Migration
+
+The database context was moved from:
+
+```text
+Seatsure.DAL/AppDbContext.cs
+```
+
+to:
+
+```text
+Seatsure.Infrastructure/Data/AppDbContext.cs
+```
+
+The `AppDbContext` remains responsible for Entity Framework Core database configuration and entity relationships.
+
+---
+
+## 8. Project References
+
+The project dependencies follow the Clean Architecture structure:
+
+```text
+Seatsure.Application
+        ↓
+Seatsure.Domain
+
+Seatsure.Infrastructure
+        ↓
+Seatsure.Application
+        ↓
+Seatsure.Domain
+
+Seatsure API
+        ↓
+Seatsure.Application
+        ↓
+Seatsure.Infrastructure
+        ↓
+Seatsure.Domain
+```
+
+This keeps the Domain layer independent from database and infrastructure concerns.
+
+The main dependency rule is:
+
+```text
+Domain
+  ↑
+Application
+  ↑
+Infrastructure
+  ↑
+API
+```
+
+The Domain layer does not reference any outer layer.
+
+---
+
+## 9. Clean Architecture Responsibilities
+
+### Domain
+
+Responsible for:
+
+- Entities
+- Enums
+- Core domain concepts
+- Domain rules
+
+The Domain layer should remain independent from external technologies.
+
+### Application
+
+Responsible for:
+
+- Repository interfaces
+- Application-level contracts
+- Abstractions required by the application
+
+The Application layer does not contain Entity Framework Core implementations.
+
+### Infrastructure
+
+Responsible for:
+
+- Entity Framework Core
+- `AppDbContext`
+- Repository implementations
+- SQL Server database access
+
+### API
+
+Responsible for:
+
+- HTTP endpoints
+- Controllers
+- Dependency Injection
+- Swagger/OpenAPI
+- HTTP request and response handling
+
+---
+
+## 10. Repository Responsibilities
+
+Each repository is responsible for handling data access for a specific entity.
+
+### UserRepository
+
+Uses `AppDbContext.Users` to:
+
+- Find users by ID
+- Find users by email
+- Add users
+- Save changes
+
+### EventRepository
+
+Uses `AppDbContext.Events` to:
+
+- Find events by ID
+- Include related ticket types
+- Retrieve published events
+- Apply pagination
+- Add events
+- Save changes
+
+### TicketTypeRepository
+
+Uses `AppDbContext.TicketTypes` to:
+
+- Find ticket types by ID
+- Retrieve ticket types for an event
+- Add ticket types
+- Save changes
+
+### ReservationRepository
+
+Uses `AppDbContext.Reservations` to:
+
+- Find reservations by ID
+- Include related ticket types
+- Retrieve reservations for a user
+- Retrieve expired pending holds
+- Add reservations
+- Save changes
+
+---
+
+## 11. Entity Framework Core
+
+The Infrastructure project uses Entity Framework Core.
+
+Packages used include:
+
+```text
+Microsoft.EntityFrameworkCore
+Microsoft.EntityFrameworkCore.SqlServer
+Microsoft.EntityFrameworkCore.Design
+```
+
+The database provider is SQL Server.
+
+The connection string is configured through the API configuration and used by `Program.cs`:
+
+```csharp
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
+```
+
+---
+
+## 12. Dependency Injection Flow
+
+At application startup, the API registers the database context and repositories.
+
+```text
+Program.cs
+    │
+    ├── AppDbContext
+    │
+    ├── IUserRepository → UserRepository
+    │
+    ├── IEventRepository → EventRepository
+    │
+    ├── ITicketTypeRepository → TicketTypeRepository
+    │
+    └── IReservationRepository → ReservationRepository
+```
+
+When a repository interface is requested, ASP.NET Core Dependency Injection provides the corresponding Infrastructure implementation.
+
+For example:
+
+```text
+IUserRepository
+      ↓
+UserRepository
+      ↓
+AppDbContext
+      ↓
+SQL Server
+```
+
+---
+
+## 13. Benefits of the New Architecture
+
+The Clean Architecture structure provides:
+
+### Separation of Concerns
+
+Each project has a specific responsibility.
+
+### Loose Coupling
+
+The Application layer depends on repository abstractions instead of database implementations.
+
+### Maintainability
+
+Database-related code is isolated inside the Infrastructure layer.
+
+### Testability
+
+Repository interfaces can be mocked or replaced during testing.
+
+### Scalability
+
+Additional infrastructure implementations can be introduced without changing the Domain layer.
+
+### Clear Project Organization
+
+The architecture makes it easier to understand where new code should be placed.
+
+---
+
+## 14. Before vs After
+
+### Before
+
+```text
+Seatsure API
+    │
+    ├── BLL
+    │
+    └── DAL
+         └── Entity Framework Core
+```
+
+### After
+
+```text
+Seatsure API
+    │
+    ├── Application
+    │     └── Repository Interfaces
+    │
+    └── Infrastructure
+          ├── AppDbContext
+          └── Repository Implementations
+
+Application
+    │
+    └── Domain
+```
+
+---
+
+## 15. Task Requirements
+
+The task required implementing the Repository Pattern using the common Clean Architecture structure.
+
+The required structure was:
+
+```text
+Domain
+Application
+Infrastructure
+API
+```
+
+The implementation includes:
+
+- Creating the `Seatsure.Application` project.
+- Creating the `Seatsure.Infrastructure` project.
+- Moving repository interfaces to the Application layer.
+- Moving repository implementations to the Infrastructure layer.
+- Moving `AppDbContext` to the Infrastructure layer.
+- Adding the required project references.
+- Adding Entity Framework Core packages to Infrastructure.
+- Registering repositories using Dependency Injection.
+- Removing the previous BLL and DAL projects.
+- Verifying that the complete solution builds successfully.
+
+---
+
+## 16. Technologies
+
+- .NET 8
+- ASP.NET Core
+- Entity Framework Core 8
+- SQL Server
+- C#
+- Swagger / OpenAPI
+
+---
+
+## 17. Build Verification
+
+The solution was verified using:
+
+```bash
+dotnet build
+```
+
+Build result:
+
+```text
+Restore complete
+
+Seatsure.Domain succeeded
+Seatsure.Application succeeded
+Seatsure.Infrastructure succeeded
+Seatsure succeeded
+
+Build succeeded
+```
+
+All four projects build successfully without compilation errors.
+
+---
+
+## 18. Final Architecture
+
+The final SeatSure architecture is:
+
+```mermaid
+graph TD
+    DOMAIN["Seatsure.Domain"]
+    APP["Seatsure.Application<br/>Repository Interfaces"]
+    INFRA["Seatsure.Infrastructure<br/>DbContext + Repositories"]
+    API["Seatsure API"]
+
+    APP --> DOMAIN
+    INFRA --> APP
+    INFRA --> DOMAIN
+    API --> APP
+    API --> INFRA
+    INFRA --> DB[("SQL Server")]
+```
+
+The final solution follows the common Clean Architecture structure and implements the Repository Pattern by keeping repository abstractions in the Application layer and their Entity Framework Core implementations in the Infrastructure layer.
+
+---
+
+## 19. Conclusion
+
+SeatSure was reorganized from the original BLL/DAL architecture into a cleaner and more maintainable structure based on Clean Architecture.
+
+The final solution separates:
+
+- **Domain** — core business entities and concepts.
+- **Application** — repository abstractions.
+- **Infrastructure** — database access and repository implementations.
+- **API** — HTTP endpoints and application configuration.
+
+The Repository Pattern is now implemented independently from the API layer, while Entity Framework Core and SQL Server remain isolated within the Infrastructure layer.
+
+The solution successfully builds with:
+
+```bash
+dotnet build
+```
+
+and all projects compile successfully.
